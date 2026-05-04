@@ -8,14 +8,14 @@ get_width(
   ...,
   n = NULL,
   n_dodge = NULL,
-  orientation = "x",
+  orientation = c("x", "y"),
   equiwidth = NULL,
   panel_widths = NULL,
   panel_heights = NULL
 )
 }
 \arguments{
-\item{...}{Must be empty. Forces all other arguments to be named.}
+\item{...}{Must be empty. Forces all other arguments to be named and allows trailing commas.}
 
 \item{n}{Number of categories in the orientation aesthetic (i.e. \code{"x"} or \code{"y"}).
 For faceted plots, use the maximum \code{n} within a facet.}
@@ -125,7 +125,6 @@ mpg |>
     fill = "grey",
   ) +
   theme(panel.widths = unit(160, "mm"))
-
 }
 \seealso{
 \code{\link[=set_equiwidth]{set_equiwidth()}}

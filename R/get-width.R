@@ -5,7 +5,7 @@
 #'
 #' This can be used in geoms such as [geom_bar()]/[geom_col()], [geom_boxplot()], [geom_errorbar()].
 #'
-#' @param ... Must be empty. Forces all other arguments to be named.
+#' @param ... Must be empty. Forces all other arguments to be named and allows trailing commas.
 #' @param n Number of categories in the orientation aesthetic (i.e. `"x"` or `"y"`).
 #'   For faceted plots, use the maximum `n` within a facet.
 #' @param n_dodge Number of dodge categories. Must match the number of groups in
@@ -107,27 +107,45 @@
 #'     fill = "grey",
 #'   ) +
 #'   theme(panel.widths = unit(160, "mm"))
-#'
 get_width <- function(
-  ...,
-  n = NULL,
-  n_dodge = NULL,
-  orientation = "x",
-  equiwidth = NULL,
-  panel_widths = NULL,
-  panel_heights = NULL
+    ...,
+    n = NULL,
+    n_dodge = NULL,
+    orientation = c("x", "y"),
+    equiwidth = NULL,
+    panel_widths = NULL,
+    panel_heights = NULL
 ) {
+  rlang::check_dots_empty()
+
+  orientation <- rlang::arg_match(orientation)
+
   if (is.null(n)) {
-    stop("n must be specified")
+    rlang::abort("`n` must be specified.")
   }
-
-  is_unit <- function(x) inherits(x, "unit")
-
-  if (!is.null(panel_widths) && !is_unit(panel_widths)) {
-    stop("`panel_widths` must be a `grid::unit` object.")
+  if (!rlang::is_scalar_integerish(n, finite = TRUE)) {
+    rlang::abort("`n` must be a single whole number.")
   }
-  if (!is.null(panel_heights) && !is_unit(panel_heights)) {
-    stop("`panel_heights` must be a `grid::unit` object.")
+  if (n <= 0) {
+    rlang::abort("`n` must be a positive whole number.")
+  }
+  if (!is.null(n_dodge) && !rlang::is_scalar_integerish(n_dodge, finite = TRUE)) {
+    rlang::abort("`n_dodge` must be a single whole number.")
+  }
+  if (!is.null(n_dodge) && n_dodge <= 0) {
+    rlang::abort("`n_dodge` must be a positive whole number.")
+  }
+  if (!is.null(equiwidth) && (!is.numeric(equiwidth) || length(equiwidth) != 1 || !is.finite(equiwidth))) {
+    rlang::abort("`equiwidth` must be a single finite numeric value.")
+  }
+  if (!is.null(equiwidth) && equiwidth <= 0) {
+    rlang::abort("`equiwidth` must be a positive value.")
+  }
+  if (!is.null(panel_widths) && !grid::is.unit(panel_widths)) {
+    rlang::abort("`panel_widths` must be a `grid::unit` object.")
+  }
+  if (!is.null(panel_heights) && !grid::is.unit(panel_heights)) {
+    rlang::abort("`panel_heights` must be a `grid::unit` object.")
   }
 
   # Resolve n_dodge, defaulting to 1 if not supplied
@@ -136,37 +154,39 @@ get_width <- function(
   # Resolve equiwidth from global option if not supplied, defaulting to 1
   equiwidth <- equiwidth %||% getOption("ggwidth.equiwidth", default = 1)
 
-  # Convert to internal width
+  # Normalises so equiwidth = 1 produces a balanced width at reference dimensions
   equiwidth <- equiwidth / 7.5
 
   # 1. Get current theme settings, overriding with supplied dims if provided
   current_theme <- ggplot2::theme_get()
-  panel_widths <- panel_widths %||% current_theme$panel.widths
+  panel_widths  <- panel_widths  %||% current_theme$panel.widths
   panel_heights <- panel_heights %||% current_theme$panel.heights
 
-  # 2. Validation and Conversion
-  current_panel_dim <- if (orientation == "x") panel_widths else panel_heights
-  current_panel_mm <- safe_convert_mm(current_panel_dim)
+  # 2. Validate that all panel dimension elements are equal
+  check_units_equal(panel_widths,  "panel_widths")
+  check_units_equal(panel_heights, "panel_heights")
 
-  panel_widths_mm <- safe_convert_mm(panel_widths)
+  # 3. Validation and Conversion
+  current_panel_dim <- if (orientation == "x") panel_widths else panel_heights
+  current_panel_mm  <- safe_convert_mm(current_panel_dim)
+
+  panel_widths_mm  <- safe_convert_mm(panel_widths)
   panel_heights_mm <- safe_convert_mm(panel_heights)
 
   if (is.na(panel_widths_mm) || is.na(panel_heights_mm)) {
-    stop("Physical panel widths and heights must both be set in the theme.")
+    rlang::abort(
+      "Physical panel widths and heights must both be set in the theme."
+    )
   }
 
-  # 3. Reference panel dimensions
-  ref_panel_widths <- rep(grid::unit(75, "mm"), 2)
+  # 4. Reference panel dimensions
+  ref_panel_widths  <- rep(grid::unit(75, "mm"), 2)
   ref_panel_heights <- rep(grid::unit(50, "mm"), 2)
-  ref_panel_dim <- if (orientation == "x") {
-    ref_panel_widths
-  } else {
-    ref_panel_heights
-  }
-  ref_panel_mm <- safe_convert_mm(ref_panel_dim)
+  ref_panel_dim <- if (orientation == "x") ref_panel_widths else ref_panel_heights
+  ref_panel_mm  <- safe_convert_mm(ref_panel_dim)
 
-  # 4. Reference n equiwidth to orientation
-  ref_n_x <- 3
+  # 5. Reference n equiwidth to orientation
+  ref_n_x     <- 3
   ref_n_dodge <- 1
   ref_n <- if (orientation == "x") {
     ref_n_x
@@ -175,22 +195,18 @@ get_width <- function(
       (safe_convert_mm(ref_panel_heights) / safe_convert_mm(ref_panel_widths))
   }
 
-  # 5. Calculation
+  # 6. Calculation
   base_width <- (n / ref_n) * equiwidth
-  width <- if (n_dodge > 1 || ref_n_dodge > 1) {
-    base_width * (n_dodge / ref_n_dodge)
-  } else {
-    base_width
-  }
+  width <- base_width * (n_dodge / ref_n_dodge)
 
-  # 6. Apply Physical Scaling
+  # 7. Apply Physical Scaling
   if (!is.na(current_panel_mm) && !is.na(ref_panel_mm)) {
     scaling_factor <- ref_panel_mm / current_panel_mm
     width <- width * scaling_factor
   }
 
-  if (any(width >= 1)) {
-    stop(
+  if (width >= 1) {
+    rlang::abort(
       "The calculated width must be less than 1. Reduce 'equiwidth' or adjust panel dimensions."
     )
   }

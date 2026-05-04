@@ -21,5 +21,11 @@
 #' set_equiwidth(0.75)
 #' set_equiwidth(1.33)
 set_equiwidth <- function(equiwidth = 1) {
+  if (!is.numeric(equiwidth) || length(equiwidth) != 1 || !is.finite(equiwidth)) {
+    rlang::abort("`equiwidth` must be a single finite numeric value.", call = rlang::caller_env())
+  }
+  if (equiwidth <= 0) {
+    rlang::abort("`equiwidth` must be a positive value.", call = rlang::caller_env())
+  }
   options(ggwidth.equiwidth = equiwidth)
 }

@@ -1,16 +1,3 @@
-#' Default value for NULL
-#'
-#' @description
-#' Returns `x` if it is not `NULL`, otherwise returns `y`.
-#'
-#' @param x An object.
-#' @param y A default value to use if `x` is `NULL`.
-#'
-#' @return `x` if not `NULL`, otherwise `y`.
-#'
-#' @noRd
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
 #' Convert a grid unit to millimetres safely
 #'
 #' @param x A `grid::unit` object, a list containing one, or `NULL`.
@@ -24,6 +11,8 @@ safe_convert_mm <- function(x) {
     return(NA)
   }
   u <- if (is.list(x)) x[[1]] else x[1]
+  # Silently return NA if conversion fails — caller is responsible for
+  # checking the result and raising an informative error if needed
   tryCatch(
     {
       val <- grid::convertUnit(u, "mm", valueOnly = TRUE)
@@ -31,4 +20,28 @@ safe_convert_mm <- function(x) {
     },
     error = function(e) NA
   )
+}
+
+#' Check that all elements of a grid unit vector are equal
+#'
+#' @param unit A `grid::unit` object, or `NULL`.
+#' @param name A string naming the argument, used in the error message.
+#'
+#' @return No return value. Called for side effects only.
+#'
+#' @noRd
+check_units_equal <- function(unit, name) {
+  if (!is.null(unit) && length(unit) > 1) {
+    vals <- vapply(
+      seq_along(unit),
+      function(i) grid::convertUnit(unit[i], "mm", valueOnly = TRUE),
+      numeric(1)
+    )
+    if (!all(vals == vals[1])) {
+      rlang::abort(
+        paste0("All elements of `", name, "` must be equal."),
+        call = rlang::caller_env()
+      )
+    }
+  }
 }
